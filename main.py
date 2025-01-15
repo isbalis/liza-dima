@@ -1,4 +1,4 @@
-
+#главная программа для запуска
 import asyncio
 from fileService import load_from_file
 from botService import runBot
