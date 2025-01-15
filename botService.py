@@ -17,17 +17,18 @@ from aiogram.fsm.state import State, StatesGroup
 import numpy as np               # импорт numpy для работы с массивом
 from fileService import save_to_file, load_from_file, save_user_data, load_user_data
 from cbrService import getCurrency
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 
 async def runBot(botToken):
     globalCurrencyFilename= "userCurrencies"
     globalNumsFilename = "userNums"
 
-
     class Form(StatesGroup):
         num = State()
         cur = State()
-    
+
     bot = Bot(
                 token=botToken,
                 default=DefaultBotProperties(
@@ -37,6 +38,28 @@ async def runBot(botToken):
     router=Router()
     dp = Dispatcher(storage=MemoryStorage()) #главный обработчик действий и уведомлений
     dp.include_router(router) #добавляем обработчик "router" в главный обработчик
+
+    scheduler = AsyncIOScheduler()
+
+    async def checkUserSpots():
+
+        loop = asyncio._get_running_loop
+
+        user_currencies = load_user_data(globalCurrencyFilename)
+        user_thresholds = load_user_data(globalNumsFilename)
+
+        for user_id, currency in user_currencies.items():
+            threshold = user_thresholds.get(user_id, None)
+            if threshold is not None and threshold != -1:
+                currency_code = currency.split(" ")[0] 
+                today = datetime.now().strftime('%Y-%m-%d')
+                info = getCurrency(today, currency_code.upper())
+                if info is not None and info['rate'] >= threshold:
+                    # Send a notification to the user
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=f"🎉 Значение курса {info['rate']} для {currency_code} превысило ваше целевое значение {threshold}!"
+                    )
 
     @router.message(Command("start"))
     async def start_handler(msg: Message, state: FSMContext):
@@ -122,6 +145,8 @@ async def runBot(botToken):
             await message.reply(f"Курс {currency} на сегодня:\nКурс: {info['rate']}\nНоминал: {info['nominal']}\nКод: {info['code']}\nПолное название: {info['name']}")
         else:
             await message.reply("Произошла ошибка! Повторите запрос позднее.")
-            
+    #scheduler.add_job(checkUserSpots, 'date', run_date=datetime.now() + timedelta(seconds=5)) #для проверки расписания
+    scheduler.add_job(checkUserSpots, CronTrigger(hour=12, minute=00))
+    scheduler.start()
     await bot.delete_webhook(drop_pending_updates=True) # отключаем предыдущее соединение бота с сервером телеграмм
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types()) 
