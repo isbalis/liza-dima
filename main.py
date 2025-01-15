@@ -1,11 +1,7 @@
+
 import asyncio
-from datetime import datetime
-from cbrService import getCursOnDate
-from botSericve import runBot
+from fileService import load_from_file
+from botService import runBot
 
-today = datetime.now().strftime('%Y-%m-%d')
-print("Курс валют а сегодня:")
-print(getCursOnDate(today))
-
-bot_token = "---------"
+bot_token = load_from_file("config").get("BOT_TOKEN")
 asyncio.run(runBot(bot_token))
